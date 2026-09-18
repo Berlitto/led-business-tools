@@ -46,6 +46,10 @@ POLL_INTERVAL_SECONDS = int(os.environ.get("POLL_INTERVAL_SECONDS", "60"))
 CONVERSATIONS_LOG_PATH = os.environ.get("CONVERSATIONS_LOG_PATH", "conversations.log.jsonl")
 COMPANY_NAME = os.environ.get("COMPANY_NAME", "YOUR_COMPANY_NAME_HERE")
 
+# Письма от адресов, содержащих любую из этих подстрок, пропускаются без
+# ответа через Claude API (автоматические/системные рассылки).
+SKIPPED_SENDER_SUBSTRINGS = ("no-reply", "noreply", "mailer-daemon")
+
 SYSTEM_PROMPT = f"""Ты — менеджер по продажам компании "{COMPANY_NAME}",
 LED-посреднической компании в Азербайджане (Баку). Компания сводит клиентов,
 которым нужна реклама на LED-экранах (торговые центры, улицы, фасады
@@ -87,6 +91,11 @@ def get_gmail_service():
             token_file.write(creds.to_json())
 
     return build("gmail", "v1", credentials=creds)
+
+
+def get_bot_email_address(service) -> str:
+    profile = service.users().getProfile(userId="me").execute()
+    return profile["emailAddress"].lower()
 
 
 def get_or_create_label_id(service, label_name: str) -> str:
@@ -139,6 +148,15 @@ def get_message_details(service, msg_id: str) -> dict:
         "references": headers.get("References", ""),
         "body": _decode_body(message["payload"]).strip(),
     }
+
+
+def should_skip_sender(sender: str, bot_email: str) -> bool:
+    sender_address = parseaddr(sender)[1].lower()
+    if not sender_address:
+        return False
+    if sender_address == bot_email:
+        return True
+    return any(substring in sender_address for substring in SKIPPED_SENDER_SUBSTRINGS)
 
 
 # --- Claude: генерация ответа ---
@@ -202,9 +220,21 @@ def log_conversation(entry: dict) -> None:
 
 # --- Основной цикл ---
 
-def process_new_messages(service, processed_label_id: str) -> None:
+def process_new_messages(service, processed_label_id: str, bot_email: str) -> None:
     for msg_id in list_new_message_ids(service, processed_label_id):
         message = get_message_details(service, msg_id)
+
+        if should_skip_sender(message["from"], bot_email):
+            mark_as_processed(service, msg_id, processed_label_id)
+            log_conversation({
+                "message_id": msg_id,
+                "from": message["from"],
+                "subject": message["subject"],
+                "incoming_body": message["body"],
+                "reply": None,
+                "status": "skipped",
+            })
+            continue
 
         try:
             reply_text = generate_reply(message["subject"], message["body"], message["from"])
@@ -234,10 +264,11 @@ def process_new_messages(service, processed_label_id: str) -> None:
 def main() -> None:
     service = get_gmail_service()
     processed_label_id = get_or_create_label_id(service, GMAIL_PROCESSED_LABEL)
+    bot_email = get_bot_email_address(service)
 
     while True:
         try:
-            process_new_messages(service, processed_label_id)
+            process_new_messages(service, processed_label_id, bot_email)
         except Exception:
             logger.exception("Непредвиденная ошибка в основном цикле")
 
