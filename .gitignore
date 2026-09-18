@@ -1,0 +1,20 @@
+# Секреты и учётные данные
+.env
+credentials.json
+token.json
+
+# Логи
+*.log
+*.log.jsonl
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.venv/
+env/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
