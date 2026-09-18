@@ -13,6 +13,7 @@ Email-бот: читает новые письма в Gmail, отвечает н
 
 import base64
 import json
+import logging
 import os
 import time
 from datetime import datetime, timezone
@@ -27,6 +28,9 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 
 load_dotenv()
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+logger = logging.getLogger(__name__)
 
 # --- Конфигурация (значения берутся из .env, см. .env.example) ---
 
@@ -234,8 +238,8 @@ def main() -> None:
     while True:
         try:
             process_new_messages(service, processed_label_id)
-        except Exception as e:
-            print(f"Непредвиденная ошибка в основном цикле: {e}")
+        except Exception:
+            logger.exception("Непредвиденная ошибка в основном цикле")
 
         time.sleep(POLL_INTERVAL_SECONDS)
 
