@@ -25,7 +25,6 @@ from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
 
 load_dotenv()
 
@@ -216,7 +215,7 @@ def process_new_messages(service, processed_label_id: str) -> None:
                 "reply": reply_text,
                 "status": "sent",
             })
-        except (RuntimeError, HttpError) as e:
+        except Exception as e:
             log_conversation({
                 "message_id": msg_id,
                 "from": message["from"],
@@ -235,8 +234,8 @@ def main() -> None:
     while True:
         try:
             process_new_messages(service, processed_label_id)
-        except HttpError as e:
-            print(f"Ошибка Gmail API: {e}")
+        except Exception as e:
+            print(f"Непредвиденная ошибка в основном цикле: {e}")
 
         time.sleep(POLL_INTERVAL_SECONDS)
 
